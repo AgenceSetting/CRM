@@ -2224,10 +2224,30 @@ async function deactivateMember(email){
 }
 
 async function quickDelClient(id){
-  if(!confirm('Supprimer ce client ?'))return;
-  await db.from('clients').delete().eq('id',id);
+  if(!confirm('Supprimer ce client et toutes ses données associées (leads, calls, prospects) ?'))return;
+  // Supprimer les données liées d'abord pour éviter les erreurs de contrainte FK
+  await db.from('leads').delete().eq('client_id',id);
+  await db.from('calls').delete().eq('client_id',id);
+  await db.from('setter_prospects').delete().eq('client_id',id);
+  await db.from('daily_reports').delete().eq('client_id',id);
+  // Supprimer le lien dans membres (remettre client_id à null)
+  await db.from('membres').update({client_id:null}).eq('client_id',id);
+  // Supprimer le client
+  var res=await db.from('clients').delete().eq('id',id);
+  if(res.error){
+    toast('Erreur suppression: '+res.error.message,'err');
+    // Recharger depuis Supabase pour resynchroniser l'état réel
+    var fresh=await db.from('clients').select('*').order('created_at');
+    if(!fresh.error)DB.clients=fresh.data||[];
+    renderPage(true);
+    return;
+  }
   DB.clients=DB.clients.filter(function(x){return x.id!==id;});
-  toast('Client supprime');renderPage(true);
+  DB.leads=DB.leads.filter(function(x){return x.client_id!==id;});
+  DB.calls=DB.calls.filter(function(x){return x.client_id!==id;});
+  DB.setter_prospects=DB.setter_prospects.filter(function(x){return x.client_id!==id;});
+  toast('Client supprimé ✓','ok');
+  renderPage(true);
 }
 
 function toggleClientFields(){
