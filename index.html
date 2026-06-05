@@ -1195,41 +1195,69 @@ async function login(){
   }
   if(!role){err.textContent='Acces non autorise. Contactez l\'admin.';await db.auth.signOut();btn.disabled=false;btn.textContent='Se connecter';return;}
   userRole=role;
-  // ── Chargement données client (triple fallback) ──
+  // ── Chargement données client ──────────────────────
   if(userRole.role==='client'){
-    // Fallback 1 : récupérer client_id depuis membres si absent dans ROLES
-    if(!userRole.client_id){
-      var memRow=await db.from('membres').select('client_id').eq('email',email).eq('actif',true).single();
-      if(memRow.data&&memRow.data.client_id){userRole.client_id=memRow.data.client_id;}
-    }
-    // Fallback 2 : charger les données du client depuis la table clients
-    if(userRole.client_id){
-      var clientRes=await db.from('clients').select('*').eq('id',userRole.client_id).single();
-      if(clientRes.data){
-        userRole.client_nom=clientRes.data.nom||'';
-        userRole.client_offre=clientRes.data.offre||'';
-        userRole.client_objectif=clientRes.data.objectif||0;
-        userRole.client_tarif_rdv=clientRes.data.tarif_rdv||150;
-      }
-    }
-    // Fallback 3 : si toujours pas d'offre, forcer rechargement nav après loadData
-    if(!userRole.client_offre){
-      console.warn('[CRM] client_offre vide apres login — verifiez client_id dans la table membres');
-    }
+    await _loadClientData(email);
   }
   document.getElementById('ls').style.display='none';
   document.getElementById('as').style.display='block';
   btn.disabled=false;btn.textContent='Se connecter';
   initApp();
-  // Load the rest of data in background, then refresh
   loadData().then(function(){
     setupRT();
-    // Si le client n'avait pas d'offre au moment de buildNav, rebatir la nav maintenant
-    if(userRole&&userRole.role==='client'&&userRole.client_offre){
-      buildNav();
-    }
+    if(userRole&&userRole.role==='client'&&userRole.client_offre){buildNav();}
     renderPage();
   });
+}
+
+// ── Chargement centralisé données client ──────────────────────────────
+async function _loadClientData(email){
+  // Étape 1 : récupérer client_id depuis membres (avec select complet)
+  if(!userRole.client_id){
+    var memRow=await db.from('membres').select('id,email,nom,role,client_id,actif').eq('email',email).single();
+    console.log('[CRM CLIENT] membres row:', JSON.stringify(memRow.data));
+    if(memRow.data&&memRow.data.client_id){
+      userRole.client_id=memRow.data.client_id;
+    }
+  }
+
+  // Étape 2 : charger le client par client_id
+  if(userRole.client_id){
+    var cRes=await db.from('clients').select('*').eq('id',userRole.client_id).single();
+    console.log('[CRM CLIENT] client by id:', JSON.stringify(cRes.data));
+    if(cRes.data){
+      userRole.client_nom=cRes.data.nom||'';
+      userRole.client_offre=cRes.data.offre||'';
+      userRole.client_objectif=cRes.data.objectif||0;
+      userRole.client_tarif_rdv=cRes.data.tarif_rdv||150;
+      return;
+    }
+  }
+
+  // Étape 3 (fallback) : chercher le client par correspondance de nom dans membres
+  if(!userRole.client_offre&&userRole.name){
+    var allClients=await db.from('clients').select('*');
+    console.log('[CRM CLIENT] fallback — tous les clients:', (allClients.data||[]).map(function(c){return c.nom;}));
+    if(allClients.data&&allClients.data.length){
+      // Essayer de matcher par nom (premier mot du nom membre vs nom client)
+      var nomMembre=(userRole.name||'').toLowerCase();
+      var matched=allClients.data.find(function(c){
+        var nc=(c.nom||'').toLowerCase();
+        return nc.indexOf(nomMembre.split(' ')[0])>=0||nomMembre.indexOf((nc.split(' ')[0]||''))>=0;
+      });
+      if(matched){
+        console.log('[CRM CLIENT] match par nom:', matched.nom);
+        userRole.client_id=matched.id;
+        userRole.client_nom=matched.nom||'';
+        userRole.client_offre=matched.offre||'';
+        userRole.client_objectif=matched.objectif||0;
+        userRole.client_tarif_rdv=matched.tarif_rdv||150;
+        return;
+      }
+    }
+  }
+
+  console.warn('[CRM CLIENT] Impossible de charger le client. client_id dans membres:',userRole.client_id,'— Vérifiez la table membres dans Supabase.');
 }
 
 async function logout(){
@@ -1250,22 +1278,7 @@ async function checkSess(){
   if(!role){var mr=await db.from('membres').select('*').eq('email',email).eq('actif',true).single();if(mr.data)role=ROLES[email]={role:mr.data.role,name:mr.data.nom,color:mr.data.color||'#10B981',id:mr.data.id,client_id:mr.data.client_id||null};}
   if(!role){await db.auth.signOut();return;}
   userRole=role;
-  // ── Chargement données client (triple fallback) ──
-  if(userRole.role==='client'){
-    if(!userRole.client_id){
-      var memRow2=await db.from('membres').select('client_id').eq('email',email).eq('actif',true).single();
-      if(memRow2.data&&memRow2.data.client_id){userRole.client_id=memRow2.data.client_id;}
-    }
-    if(userRole.client_id){
-      var cRes2=await db.from('clients').select('*').eq('id',userRole.client_id).single();
-      if(cRes2.data){
-        userRole.client_nom=cRes2.data.nom||'';
-        userRole.client_offre=cRes2.data.offre||'';
-        userRole.client_objectif=cRes2.data.objectif||0;
-        userRole.client_tarif_rdv=cRes2.data.tarif_rdv||150;
-      }
-    }
-  }
+  if(userRole.role==='client'){await _loadClientData(email);}
   document.getElementById('ls').style.display='none';
   document.getElementById('as').style.display='block';
   initApp();
