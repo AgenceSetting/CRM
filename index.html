@@ -1324,7 +1324,6 @@ function buildNav(){
     h+=ni('del-tracking','&#128202;','Reporting equipe');
     h+=ni('del-analytics','&#128201;','Analytique accroches');
     h+=ni('del-sc-analytics','&#128200;','Performance setting/closing');
-    h+=ni('del-maquette','&#127912;','Site maquette');
     h+=ni('ga-agenda','&#128197;','Google Agenda');
     h+='<div class="sb-sep"></div>';
     h+='<div class="sb-slbl">Front office agence</div>';
@@ -1343,7 +1342,6 @@ function buildNav(){
     h+=ni('mgr-perf','&#8599;','Performance');
     h+=ni('mgr-tracking','&#128202;','Reporting');
     h+=ni('mgr-analytics','&#128202;','Analytique accroches');
-    h+=ni('mgr-maquette','&#127912;','Site maquette');
   } else if(r==='closer_delivery'){
     h+='<div class="sb-slbl">Mon espace closing</div>';
     h+=ni('dash-closer','&#9638;','Dashboard');
@@ -1353,7 +1351,6 @@ function buildNav(){
     h+=ni('set-brief','&#128196;','Briefs missions');
     h+=ni('set-cal','&#9783;','Mon calendrier');
     h+=ni('set-pipeline','&#9647;','Pipeline leads');
-    h+=ni('set-maquette','&#127912;','Site maquette');
     h+=ni('set-remun','&#8364;','Remuneration');
   } else if(r==='front_office'||r==='setter_agence'||r==='closer_agence'||r==='manager_agence'){
     h+='<div class="sb-slbl">Front Office</div>';
@@ -1386,7 +1383,6 @@ function buildNav(){
     h+=ni('set-brief','&#128196;','Briefs missions');
     h+=ni('set-cal','&#9783;','Mon calendrier');
     h+=ni('set-pipeline','&#9647;','Pipeline leads');
-    h+=ni('set-maquette','&#127912;','Site maquette');
     h+=ni('set-remun','&#8364;','Remuneration');
   }
   nc.innerHTML=h;
