@@ -8549,8 +8549,6 @@ function clearSbKey(){
 // ══════════════════════════════════════════════════
 // BRIEF SETTER — GENERATION & AFFICHAGE
 // ══════════════════════════════════════════════════
-var _briefClientId=null;
-var _briefGenerated='';
 
 var BRIEF_SYSTEM_PROMPT='Tu es un expert en setting et prospection commerciale pour Agence Setting.\n'
 +'Tu vas lire un document d\'onboarding client et produire un BRIEF MISSION complet destine aux setters de l\'agence.\n\n'
@@ -8686,6 +8684,23 @@ async function deleteBrief(clientId, briefId){
   toast('Brief supprimé','ok');renderPage(true);
 }
 
+function briefBack(){
+  var s1=document.getElementById('brief-step1');
+  var s2=document.getElementById('brief-step2');
+  if(s1)s1.style.display='';
+  if(s2)s2.style.display='none';
+  _briefGenerated='';
+}
+
+function openBase64Devis(encodedUrl){
+  try{
+    var url=decodeURIComponent(encodedUrl);
+    window.open(url,'_blank');
+  }catch(e){
+    toast('Impossible d\'ouvrir le devis','err');
+  }
+}
+
 async function generateBrief(){
   var fi=document.getElementById('brief-file');
   if(!fi.files||!fi.files[0]){toast('Sélectionnez un fichier PDF','err');return;}
@@ -8756,42 +8771,6 @@ function briefToHTML(md){
     .replace(/(<li[^>]*>.*<\/li>\n?)+/g,'<ul style="margin:8px 0 8px 18px;padding:0;list-style:disc">$&</ul>')
     .replace(/^(?!<[h|u|l|h|e|s])(.+\S.*)$/gm,'<p style="margin:6px 0;color:#1E293B;font-size:13px;line-height:1.65">$1</p>')
     .replace(/\n{2,}/g,'');
-}
-
-async function saveBrief(){
-  if(!_briefGenerated||!_briefClientId){toast('Rien à sauvegarder','err');return;}
-  var titre=document.getElementById('brief-titre').value.trim()||'Brief sans titre';
-  var btn=document.getElementById('brief-save-btn');
-  btn.disabled=true;btn.textContent='Sauvegarde...';
-  var c=DB.clients.find(function(x){return x.id===_briefClientId;});
-  var briefs=getBriefs(c).filter(function(b){return b.id!=='legacy';});
-  if(_briefEditId&&_briefEditId!=='legacy'){
-    // Edit existing brief
-    var idx=briefs.findIndex(function(b){return b.id===_briefEditId;});
-    if(idx>=0){briefs[idx].titre=titre;briefs[idx].content=_briefGenerated;briefs[idx].updated_at=new Date().toISOString();}
-    else{briefs.unshift({id:_briefEditId,titre:titre,content:_briefGenerated,created_at:new Date().toISOString()});}
-  } else {
-    // New brief
-    briefs.unshift({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),titre:titre,content:_briefGenerated,created_at:new Date().toISOString()});
-  }
-  var r=await db.from('clients').update({briefs:briefs}).eq('id',_briefClientId);
-  if(r.error){toast('Erreur: '+r.error.message,'err');btn.disabled=false;btn.textContent='💾 Sauvegarder dans le CRM';return;}
-  var i=DB.clients.findIndex(function(x){return x.id===_briefClientId;});
-  if(i>=0)DB.clients[i].briefs=briefs;
-  cmo('mo-brief');
-  toast('Brief "'+titre+'" sauvegardé ✓','ok');
-  renderPage(true);
-}
-
-async function deleteBrief(clientId, briefId){
-  if(!confirm('Supprimer ce brief ?'))return;
-  var c=DB.clients.find(function(x){return x.id===clientId;});
-  var briefs=(c.briefs||[]).filter(function(b){return b.id!==briefId;});
-  var r=await db.from('clients').update({briefs:briefs}).eq('id',clientId);
-  if(r.error){toast('Erreur','err');return;}
-  var i=DB.clients.findIndex(function(x){return x.id===clientId;});
-  if(i>=0)DB.clients[i].briefs=briefs;
-  toast('Brief supprimé','ok');renderPage(true);
 }
 
 // ── VUE SETTER : liste des briefs disponibles ──────
