@@ -2486,11 +2486,14 @@ function adjReportInc(id){
 async function saveReport(){
   var email=session.user.email;
   var today=new Date().toISOString().split('T')[0];
+  var dateSel=(document.getElementById('rp-date')||{value:''}).value||_rpSelectedDate||today;
+  if(dateSel>today)dateSel=today;
+  _rpSelectedDate=dateSel;
   var btn=document.getElementById('rp-submit-btn');
   if(btn){btn.disabled=true;btn.textContent='Envoi...';}
   var data={
     setter_id:email,
-    date:today,
+    date:dateSel,
     client_id:(document.getElementById('rp-client')||{value:null}).value||null,
     leads_contactes:parseInt((document.getElementById('rp-lc')||{textContent:'0'}).textContent)||0,
     leads_interesses:parseInt((document.getElementById('rp-li')||{textContent:'0'}).textContent)||0,
@@ -2501,11 +2504,42 @@ async function saveReport(){
   };
   var res=await db.from('daily_reports').upsert(data,{onConflict:'setter_id,date'}).select().single();
   if(res.error){toast('Erreur: '+res.error.message,'err');if(btn){btn.disabled=false;btn.textContent='↑ Soumettre';}return;}
-  var i=DB.reports.findIndex(function(r){return r.setter_id===email&&r.date===today;});
+  var i=DB.reports.findIndex(function(r){return r.setter_id===email&&r.date===dateSel;});
   if(i>=0)DB.reports[i]=res.data;else DB.reports.unshift(res.data);
-  toast('Reporting soumis ! ✓','ok');
+  var dFr=new Date(dateSel+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+  toast('Reporting enregistré ('+dFr+') ✓','ok');
   renderPage(true);
   setTimeout(function(){var b=document.getElementById('rp-prog-bar');if(b){var lc=parseInt((document.getElementById('rp-lc')||{textContent:'0'}).textContent)||0;b.style.width=Math.min(100,Math.round(lc/70*100))+'%';}},50);
+}
+
+// Admin/Manager : enregistre un reporting pour un membre à une date précise (antidatable)
+async function adminSaveReport(){
+  var member=(document.getElementById('ar-member')||{value:''}).value;
+  var today=new Date().toISOString().split('T')[0];
+  var dateSel=(document.getElementById('ar-date')||{value:''}).value||today;
+  if(!member){toast('Choisis un membre','err');return;}
+  if(dateSel>today)dateSel=today;
+  var btn=document.getElementById('ar-save-btn');
+  if(btn){btn.disabled=true;btn.textContent='Envoi...';}
+  var data={
+    setter_id:member,
+    date:dateSel,
+    client_id:(document.getElementById('ar-client')||{value:''}).value||null,
+    leads_contactes:parseInt((document.getElementById('ar-lc')||{value:'0'}).value)||0,
+    leads_interesses:parseInt((document.getElementById('ar-li')||{value:'0'}).value)||0,
+    rdv_bookes:parseInt((document.getElementById('ar-rb')||{value:'0'}).value)||0,
+    no_shows:parseInt((document.getElementById('ar-ns')||{value:'0'}).value)||0,
+    relances_effectuees:parseInt((document.getElementById('ar-re')||{value:'0'}).value)||0,
+    notes:(document.getElementById('ar-notes')||{value:''}).value
+  };
+  var res=await db.from('daily_reports').upsert(data,{onConflict:'setter_id,date'}).select().single();
+  if(res.error){toast('Erreur: '+res.error.message,'err');if(btn){btn.disabled=false;btn.textContent='Enregistrer le reporting';}return;}
+  var i=DB.reports.findIndex(function(r){return r.setter_id===member&&r.date===dateSel;});
+  if(i>=0)DB.reports[i]=res.data;else DB.reports.unshift(res.data);
+  var nom=ROLES[member]?ROLES[member].name:member;
+  var dFr=new Date(dateSel+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+  toast('Reporting enregistré — '+nom+' ('+dFr+') ✓','ok');
+  renderPage(true);
 }
 
 
@@ -6475,6 +6509,34 @@ function renderTracking(isMgr){
   });
   h+='</div></div>';
 
+  // ── Admin/Manager : ajouter ou corriger un reporting à une date précise ──
+  var canEditRep=userRole.role==='admin'||userRole.role==='manager';
+  if(canEditRep){
+    h+='<div class="card" style="margin-bottom:16px;border:1.5px solid var(--green)">';
+    h+='<div class="card-h" style="margin-bottom:10px"><div class="card-t">➕ Ajouter / corriger un reporting</div></div>';
+    h+='<div style="font-size:12px;color:var(--t3);margin-bottom:12px">Saisir un reporting pour un membre à une date précise — pour rattraper un jour non rempli.</div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;align-items:end">';
+    h+='<div><label style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;display:block;margin-bottom:4px">Membre</label>';
+    h+='<select id="ar-member" style="width:100%;padding:8px 10px;border:1px solid var(--bdr);border-radius:var(--r);font-size:13px;background:var(--w);font-family:inherit">';
+    team.forEach(function(em){var pm=ROLES[em];if(pm)h+='<option value="'+em+'">'+pm.name+'</option>';});
+    h+='</select></div>';
+    h+='<div><label style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;display:block;margin-bottom:4px">Date</label>';
+    h+='<input type="date" id="ar-date" value="'+todayStr+'" max="'+todayStr+'" style="width:100%;padding:8px 10px;border:1px solid var(--bdr);border-radius:var(--r);font-size:13px;background:var(--w);font-family:inherit"></div>';
+    h+='<div><label style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;display:block;margin-bottom:4px">Client</label>';
+    h+='<select id="ar-client" style="width:100%;padding:8px 10px;border:1px solid var(--bdr);border-radius:var(--r);font-size:13px;background:var(--w);font-family:inherit"><option value="">— Aucun —</option>';
+    DB.clients.forEach(function(c){h+='<option value="'+c.id+'">'+c.nom+'</option>';});
+    h+='</select></div>';
+    [{id:'ar-lc',l:'Appels / DMs'},{id:'ar-li',l:'Intéressés'},{id:'ar-rb',l:'RDV bookés'},{id:'ar-ns',l:'No-shows'},{id:'ar-re',l:'Relances'}].forEach(function(n){
+      h+='<div><label style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;display:block;margin-bottom:4px">'+n.l+'</label>';
+      h+='<input type="number" min="0" id="'+n.id+'" value="0" style="width:100%;padding:8px 10px;border:1px solid var(--bdr);border-radius:var(--r);font-size:13px;background:var(--w);font-family:inherit"></div>';
+    });
+    h+='</div>';
+    h+='<div style="margin-top:10px"><label style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;display:block;margin-bottom:4px">Notes</label>';
+    h+='<input id="ar-notes" placeholder="Optionnel" style="width:100%;padding:8px 10px;border:1px solid var(--bdr);border-radius:var(--r);font-size:13px;background:var(--w);font-family:inherit"></div>';
+    h+='<button class="btn btn-gn" id="ar-save-btn" style="margin-top:12px;font-weight:700" onclick="adminSaveReport()">Enregistrer le reporting</button>';
+    h+='</div>';
+  }
+
   // ── Per-setter status ──
   var isAdminView=userRole.role==='admin'||userRole.role==='manager';
   h+='<div class="sg" style="grid-template-columns:repeat('+Math.min(Math.max(team.length,1),4)+',1fr);margin-bottom:16px">';
@@ -9603,11 +9665,20 @@ function getDMStats(email, clientId, fromDate){
     txShowup:rdv+noshows>0?Math.round(rdv/(rdv+noshows)*100):0};
 }
 
-// ── buildReportWidget — DM-aware ──────────────────────────────────
-function buildReportWidget(email){
+// ── buildReportWidget — DM-aware + date sélectionnable (antidatable) ──
+var _rpSelectedDate=null;
+function reloadReportWidget(dateStr){
+  _rpSelectedDate=dateStr||null;
+  var host=document.getElementById('rp-widget-host');
+  if(host)host.outerHTML=buildReportWidget(session.user.email,_rpSelectedDate);
+}
+function buildReportWidget(email,selDate){
   var today=new Date().toISOString().split('T')[0];
-  var todayFr=new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
-  var rep=DB.reports.find(function(r){return r.setter_id===email&&r.date===today;})||null;
+  var dateSel=selDate||_rpSelectedDate||today;
+  if(dateSel>today)dateSel=today;
+  var isToday=dateSel===today;
+  var todayFr=new Date(dateSel+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+  var rep=DB.reports.find(function(r){return r.setter_id===email&&r.date===dateSel;})||null;
   var myClients=DB.clients.filter(function(c){
     var ids=c.setter_ids||(c.setter_id?[c.setter_id]:[]);
     var isAdmin=userRole.role==='admin'||userRole.role==='manager';
@@ -9640,12 +9711,17 @@ function buildReportWidget(email){
   var canalIc={'dm_instagram':'📱','dm_linkedin':'💼','dm_mixte':'🔀'}[canalActive]||'💬';
   var barColor=pct>=100?'linear-gradient(90deg,#10B981,#34D399)':isDM&&pct>=60?'linear-gradient(90deg,#6366F1,#818CF8)':isDM?'linear-gradient(90deg,#818CF8,#A78BFA)':pct>=60?'linear-gradient(90deg,#3B82F6,#60A5FA)':'linear-gradient(90deg,#F59E0B,#FCD34D)';
   var barLabel=isDM?'DMs du jour':'Appels du jour';
-  var h='<div id="rp-block" style="border-radius:16px;overflow:hidden;margin-bottom:16px;background:linear-gradient(160deg,#0D1B2E 0%,#0F2744 50%,#0A1E38 100%);box-shadow:0 8px 32px rgba(0,0,0,.25)">';
+  var h='<div id="rp-widget-host">';
+  h+='<div id="rp-block" style="border-radius:16px;overflow:hidden;margin-bottom:16px;background:linear-gradient(160deg,#0D1B2E 0%,#0F2744 50%,#0A1E38 100%);box-shadow:0 8px 32px rgba(0,0,0,.25)">';
   h+='<div style="padding:20px 22px 0"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px">';
   h+='<div><div style="font-size:15px;font-weight:700;color:#fff">Reporting journalier'+(isDM?' <span style="font-size:10px;background:rgba(99,102,241,.3);color:#C4B5FD;padding:2px 8px;border-radius:20px;font-weight:600">'+canalIc+' DM</span>':'')+'</div>';
-  h+='<div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:2px;text-transform:capitalize">'+todayFr+'</div></div>';
+  h+='<div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:2px;text-transform:capitalize">'+todayFr+(isToday?'':' · saisie antidatée')+'</div></div>';
+  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+  h+='<input type="date" id="rp-date" value="'+dateSel+'" max="'+today+'" onchange="reloadReportWidget(this.value)" title="Choisir la date du reporting" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:9px;color:#fff;font-size:12px;padding:7px 10px;font-family:inherit;color-scheme:dark;cursor:pointer">';
+  if(!isToday)h+='<button type="button" onclick="reloadReportWidget(\''+today+'\')" title="Revenir a la date du jour" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:9px;color:rgba(255,255,255,.7);font-size:11px;padding:7px 10px;cursor:pointer;font-family:inherit">Auj.</button>';
   if(rep)h+='<div style="display:flex;align-items:center;gap:6px;background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.35);border-radius:20px;padding:5px 12px"><span style="width:7px;height:7px;border-radius:50%;background:#10B981;display:inline-block"></span><span style="font-size:11px;font-weight:700;color:#34D399">Soumis</span></div>';
   else h+='<div style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);border-radius:20px;padding:5px 12px"><span style="font-size:11px;font-weight:700;color:#FCD34D">En attente</span></div>';
+  h+='</div>';
   h+='</div>';
   // Progress bar
   h+='<div style="margin-bottom:'+(isDM?'8':'16')+'px;padding:0"><div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:5px"><span style="color:rgba(255,255,255,.5);font-weight:600;text-transform:uppercase">'+barLabel+'</span><span style="font-weight:700;color:'+(pct>=100?'#34D399':pct>=60?'#60A5FA':'rgba(255,255,255,.7)')+'">'+lcVal+' / '+GOAL+'</span></div>';
@@ -9681,7 +9757,7 @@ function buildReportWidget(email){
   h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap;gap:8px">';
   h+='<button class="btn" id="rp-submit-btn" onclick="saveReport()" style="font-size:13px;font-weight:700;padding:10px 22px;border-radius:10px;background:linear-gradient(135deg,'+(isDM?'#6366F1,#818CF8':'#10B981,#059669')+');border:none;color:#fff">'+(rep?'✓ Mettre à jour':'↑ Soumettre')+'</button>';
   if(rep)h+='<span style="font-size:11px;color:rgba(255,255,255,.35)">'+new Date(rep.created_at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+'</span>';
-  h+='</div></div></div>';
+  h+='</div></div></div></div>';
   return h;
 }
 
@@ -9700,7 +9776,7 @@ function onRpClientChange(){
 // ══════════════════════════════════════════════════
 function renderSetterReporting(){
   var email=session.user.email;
-  var reports=DB.reports.filter(function(r){return r.setter_id===email;});
+  var reports=DB.reports.filter(function(r){return r.setter_id===email;}).sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:0;});
   var todayStr=new Date().toISOString().split('T')[0];
 
   // Detect DM mode from assigned clients
