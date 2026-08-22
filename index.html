@@ -2068,6 +2068,9 @@ function renderAdmin(){
   h+='</div>';
   h+='<div style="margin-top:12px;background:var(--bl);border-radius:var(--r);padding:11px 13px;font-size:12px;color:var(--bd)">&#x1F510; Supabase &rarr; Settings &rarr; API &rarr; <strong>service_role secret</strong>. Ne la partagez jamais.</div>';
   h+='</div></div>';
+  h+='<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--bdr)"></div>'; // Séparateur
+  h+='<div style="font-size:13px;font-weight:600;margin-bottom:4px">Configuration Slack</div>';
+  h+='<button class="btn btn-gn" style="margin-top:10px" onclick="openSlackConfig()">Ouvrir les paramètres Slack</button>';
   h+='</div>'; // end ms-params
 
   return h;
