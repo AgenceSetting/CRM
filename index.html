@@ -12512,7 +12512,259 @@ function _clDashOffre3(calls,sel){
   h+='</div>';
   return h;
 }
-
+var SLACK_CFG_ONGLET = 'membres';
+ 
+async function openSlackConfig(onglet) {
+  SLACK_CFG_ONGLET = onglet || SLACK_CFG_ONGLET;
+  closeSlackConfig();
+ 
+  var membresRes = await db.from('membres')
+    .select('email,nom,role,slack_user_id').eq('actif', true).order('nom');
+  var clientsRes = await db.from('clients')
+    .select('id,nom,slack_channel_id,showup_actif').order('nom');
+ 
+  if (membresRes.error) { toast('Erreur membres: ' + membresRes.error.message, 'err'); return; }
+  if (clientsRes.error) { toast('Erreur clients: ' + clientsRes.error.message, 'err'); return; }
+ 
+  var membres = membresRes.data || [];
+  var clients = clientsRes.data || [];
+  var sansSlack = membres.filter(function (m) { return !m.slack_user_id; }).length;
+  var sansCanal = clients.filter(function (c) { return !c.slack_channel_id; }).length;
+ 
+  var S = {
+    ov: 'position:fixed;inset:0;background:rgba(15,23,32,.55);z-index:9998',
+    mo: 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;'
+      + 'background:#fff;border-radius:14px;box-shadow:0 24px 64px rgba(15,23,32,.28);'
+      + 'width:min(660px,94vw);max-height:88vh;overflow:auto;padding:24px 26px;'
+      + 'font-family:system-ui,-apple-system,sans-serif;color:#0F172A',
+    tab: 'padding:7px 14px;font-size:12.5px;font-weight:600;border-radius:8px;cursor:pointer;border:1.5px solid',
+    inp: 'padding:7px 10px;font-family:ui-monospace,Menlo,monospace;font-size:12px;border-radius:7px;border:1.5px solid',
+    btn: 'padding:9px 17px;font-size:13px;font-weight:600;border-radius:8px;cursor:pointer'
+  };
+ 
+  function tabStyle(actif) {
+    return S.tab + (actif ? ';border-color:#0F5C5A;background:#E3EFED;color:#0F5C5A'
+                          : ';border-color:#E2E8F0;background:#fff;color:#64748B');
+  }
+  function champ(ok) {
+    return S.inp + (ok ? ';border-color:#6EE7B7;background:#F0FDF4' : ';border-color:#E2E8F0;background:#fff');
+  }
+  function avert(txt) {
+    return '<div style="background:#FEF3C7;border-left:3px solid #B45309;padding:11px 14px;'
+      + 'border-radius:0 6px 6px 0;font-size:12.5px;color:#78350F;margin-bottom:16px">' + txt + '</div>';
+  }
+ 
+  var h = '';
+  h += '<div id="slack-cfg-ov" style="' + S.ov + '" onclick="closeSlackConfig()"></div>';
+  h += '<div id="slack-cfg" style="' + S.mo + '">';
+ 
+  h += '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:16px">';
+  h += '<div style="font-size:17px;font-weight:700">Configuration Slack</div>';
+  h += '<button onclick="closeSlackConfig()" style="border:0;background:none;font-size:22px;'
+     + 'line-height:1;cursor:pointer;color:#94A3B8">&times;</button></div>';
+ 
+  h += '<div style="display:flex;gap:8px;margin-bottom:20px">';
+  h += '<button style="' + tabStyle(SLACK_CFG_ONGLET === 'membres') + '" onclick="openSlackConfig(\'membres\')">'
+     + 'Équipe' + (sansSlack ? ' · ' + sansSlack + ' à faire' : '') + '</button>';
+  h += '<button style="' + tabStyle(SLACK_CFG_ONGLET === 'clients') + '" onclick="openSlackConfig(\'clients\')">'
+     + 'Clients' + (sansCanal ? ' · ' + sansCanal + ' à faire' : '') + '</button>';
+  h += '<button style="' + tabStyle(SLACK_CFG_ONGLET === 'tests') + '" onclick="openSlackConfig(\'tests\')">Tests</button>';
+  h += '</div>';
+ 
+  // ── Onglet ÉQUIPE ────────────────────────────────────────────────
+  if (SLACK_CFG_ONGLET === 'membres') {
+    h += '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:16px">'
+       + 'Dans Slack : cliquez sur le profil de la personne → <strong>⋮ → Copier l\'identifiant de membre</strong>. '
+       + 'Il commence par <code style="background:#F1F5F9;padding:1px 5px;border-radius:3px">U</code>. '
+       + 'Sans lui, la personne apparaît en clair dans le canal mais ne reçoit aucun DM — donc aucune notification sur son téléphone.'
+       + '</div>';
+ 
+    if (sansSlack) h += avert(sansSlack + ' membre' + (sansSlack > 1 ? 's' : '') + ' sans identifiant Slack.');
+ 
+    h += '<div style="display:flex;flex-direction:column;gap:9px">';
+    membres.forEach(function (m) {
+      var id = 'slk-' + m.email.replace(/[^a-zA-Z0-9]/g, '_');
+      h += '<div style="display:flex;align-items:center;gap:10px">';
+      h += '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;'
+         + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (m.nom || m.email) + '</div>';
+      h += '<div style="font-size:11px;color:#94A3B8">' + m.email + ' · ' + (m.role || '—') + '</div></div>';
+      h += '<input id="' + id + '" value="' + (m.slack_user_id || '') + '" placeholder="U01ABCDEF" '
+         + 'spellcheck="false" style="width:150px;' + champ(!!m.slack_user_id) + '">';
+      h += '</div>';
+    });
+    h += '</div>';
+    h += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid #E2E8F0">';
+    h += '<button onclick="saveSlackMembres()" style="' + S.btn + ';border:0;background:#0F5C5A;color:#fff">Enregistrer</button>';
+    h += '</div>';
+  }
+ 
+  // ── Onglet CLIENTS ───────────────────────────────────────────────
+  if (SLACK_CFG_ONGLET === 'clients') {
+    h += '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:16px">'
+       + 'Le canal privé où le client est invité, et où il recevra 30 minutes après chaque RDV la question '
+       + '<em>« le RDV a-t-il eu lieu ? »</em> avec deux boutons. '
+       + 'Dans Slack : nom du canal → <strong>onglet À propos → identifiant du canal</strong>, en bas. Il commence par '
+       + '<code style="background:#F1F5F9;padding:1px 5px;border-radius:3px">C</code>. '
+       + '<strong>N\'oubliez pas d\'inviter l\'app dans le canal</strong> : <code>/invite @VotreApp</code>.'
+       + '</div>';
+ 
+    if (sansCanal) h += avert(sansCanal + ' client' + (sansCanal > 1 ? 's' : '') + ' sans canal — '
+       + 'leurs demandes de show-up partiront dans le canal interne, à relancer à la main.');
+ 
+    h += '<div style="display:flex;flex-direction:column;gap:9px">';
+    clients.forEach(function (c) {
+      var id = 'clk-' + String(c.id).replace(/[^a-zA-Z0-9]/g, '_');
+      var actif = c.showup_actif !== false;
+      h += '<div style="display:flex;align-items:center;gap:10px">';
+      h += '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;'
+         + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + c.nom + '</div></div>';
+      h += '<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#64748B;cursor:pointer">'
+         + '<input type="checkbox" id="' + id + '-on" ' + (actif ? 'checked' : '') + ' style="cursor:pointer"> show-up</label>';
+      h += '<input id="' + id + '" value="' + (c.slack_channel_id || '') + '" placeholder="C01ABCDEF" '
+         + 'spellcheck="false" style="width:150px;' + champ(!!c.slack_channel_id) + '">';
+      h += '</div>';
+    });
+    h += '</div>';
+    h += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid #E2E8F0">';
+    h += '<button onclick="saveSlackClients()" style="' + S.btn + ';border:0;background:#0F5C5A;color:#fff">Enregistrer</button>';
+    h += '</div>';
+  }
+ 
+  // ── Onglet TESTS ─────────────────────────────────────────────────
+  if (SLACK_CFG_ONGLET === 'tests') {
+    var url = localStorage.getItem('slack_fn_url') || '';
+    h += '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-bottom:16px">'
+       + 'Déclenche les fonctions hors de leur horaire habituel. '
+       + 'Les deux valeurs ci-dessous restent dans ce navigateur uniquement.'
+       + '</div>';
+ 
+    h += '<div style="display:flex;flex-direction:column;gap:11px;margin-bottom:20px">';
+    h += '<div><div style="font-size:11.5px;font-weight:600;color:#475569;margin-bottom:4px">URL de la fonction slack-rappels</div>';
+    h += '<input id="slk-fn-url" value="' + url + '" spellcheck="false" '
+       + 'placeholder="https://hzwywqskxvqthpeftuuo.supabase.co/functions/v1/slack-rappels" '
+       + 'style="width:100%;' + champ(!!url) + '"></div>';
+    h += '<div><div style="font-size:11.5px;font-weight:600;color:#475569;margin-bottom:4px">CRON_SECRET</div>';
+    h += '<input id="slk-secret" type="password" value="' + (localStorage.getItem('slack_cron_secret') || '') + '" '
+       + 'style="width:100%;' + champ(!!localStorage.getItem('slack_cron_secret')) + '"></div>';
+    h += '</div>';
+ 
+    h += '<div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:16px;border-top:1px solid #E2E8F0">';
+    h += '<button onclick="testSlack(\'j1\')" style="' + S.btn + ';border:0;background:#0F5C5A;color:#fff">Rappel J-1</button>';
+    h += '<button onclick="testSlack(\'jour\')" style="' + S.btn + ';border:1.5px solid #CBD5E1;background:#fff;color:#334155">Récap du jour</button>';
+    h += '<button onclick="testSlack(\'showup\')" style="' + S.btn + ';border:1.5px solid #CBD5E1;background:#fff;color:#334155">Show-up</button>';
+    h += '</div>';
+    h += '<div id="slk-test-out" style="margin-top:14px;font-family:ui-monospace,Menlo,monospace;'
+       + 'font-size:11.5px;color:#475569;white-space:pre-wrap"></div>';
+  }
+ 
+  h += '</div>';
+ 
+  var host = document.createElement('div');
+  host.id = 'slack-cfg-host';
+  host.innerHTML = h;
+  document.body.appendChild(host);
+}
+ 
+function closeSlackConfig() {
+  var host = document.getElementById('slack-cfg-host');
+  if (host) host.remove();
+}
+ 
+// ── Enregistrement ─────────────────────────────────────────────────
+ 
+async function saveSlackMembres() {
+  var r = await db.from('membres').select('email,slack_user_id').eq('actif', true);
+  if (r.error) { toast('Erreur: ' + r.error.message, 'err'); return; }
+ 
+  var maj = [], invalide = null;
+  (r.data || []).forEach(function (m) {
+    var el = document.getElementById('slk-' + m.email.replace(/[^a-zA-Z0-9]/g, '_'));
+    if (!el) return;
+    var v = el.value.trim().toUpperCase();
+    if (v && !/^[UW][A-Z0-9]{6,}$/.test(v)) { invalide = m.email; return; }
+    if ((v || null) !== (m.slack_user_id || null)) maj.push({ email: m.email, slack_user_id: v || null });
+  });
+ 
+  if (invalide) { toast('Identifiant invalide pour ' + invalide + ' — il commence par U', 'err'); return; }
+  if (!maj.length) { toast('Aucun changement', 'ok'); return; }
+ 
+  for (var i = 0; i < maj.length; i++) {
+    var u = await db.from('membres').update({ slack_user_id: maj[i].slack_user_id }).eq('email', maj[i].email);
+    if (u.error) { toast('Erreur sur ' + maj[i].email + ' : ' + u.error.message, 'err'); return; }
+  }
+  toast(maj.length + ' identifiant(s) enregistré(s)', 'ok');
+  openSlackConfig('membres');
+}
+ 
+async function saveSlackClients() {
+  var r = await db.from('clients').select('id,slack_channel_id,showup_actif');
+  if (r.error) { toast('Erreur: ' + r.error.message, 'err'); return; }
+ 
+  var maj = [], invalide = null;
+  (r.data || []).forEach(function (c) {
+    var base = 'clk-' + String(c.id).replace(/[^a-zA-Z0-9]/g, '_');
+    var el = document.getElementById(base);
+    var cb = document.getElementById(base + '-on');
+    if (!el) return;
+    var v = el.value.trim().toUpperCase();
+    if (v && !/^[CG][A-Z0-9]{6,}$/.test(v)) { invalide = c.id; return; }
+    var on = cb ? cb.checked : true;
+    if ((v || null) !== (c.slack_channel_id || null) || on !== (c.showup_actif !== false)) {
+      maj.push({ id: c.id, slack_channel_id: v || null, showup_actif: on });
+    }
+  });
+ 
+  if (invalide) { toast('Identifiant de canal invalide — il commence par C', 'err'); return; }
+  if (!maj.length) { toast('Aucun changement', 'ok'); return; }
+ 
+  for (var i = 0; i < maj.length; i++) {
+    var u = await db.from('clients')
+      .update({ slack_channel_id: maj[i].slack_channel_id, showup_actif: maj[i].showup_actif })
+      .eq('id', maj[i].id);
+    if (u.error) { toast('Erreur : ' + u.error.message, 'err'); return; }
+  }
+  toast(maj.length + ' client(s) mis à jour', 'ok');
+  openSlackConfig('clients');
+}
+ 
+// ── Tests ──────────────────────────────────────────────────────────
+ 
+async function testSlack(mode) {
+  var url = (document.getElementById('slk-fn-url') || {}).value;
+  var secret = (document.getElementById('slk-secret') || {}).value;
+  var out = document.getElementById('slk-test-out');
+ 
+  url = (url || '').trim();
+  secret = (secret || '').trim();
+  if (!url || !secret) { toast('Renseignez l\'URL et le CRON_SECRET', 'err'); return; }
+  localStorage.setItem('slack_fn_url', url);
+  localStorage.setItem('slack_cron_secret', secret);
+ 
+  if (out) out.textContent = 'Envoi (' + mode + ')…';
+  try {
+    var resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-cron-secret': secret },
+      body: JSON.stringify({ mode: mode, force: true })
+    });
+    var brut = await resp.text();
+    if (out) out.textContent = 'HTTP ' + resp.status + '\n' + brut;
+ 
+    if (resp.status === 401) { toast('CRON_SECRET refusé', 'err'); return; }
+    if (!resp.ok) { toast('Échec HTTP ' + resp.status, 'err'); return; }
+ 
+    var data = {};
+    try { data = JSON.parse(brut); } catch (e) { /* réponse non JSON */ }
+ 
+    if (data.skip) { toast('Ignoré : ' + data.skip + ' — réessayez, force est actif', 'warn'); return; }
+    if (data.calls === 0) { toast('Aucun RDV concerné — rien à envoyer', 'warn'); return; }
+    toast('Envoyé : ' + (data.calls || 0) + ' RDV, ' + (data.dms || data.envoyes || 0) + ' message(s)', 'ok');
+  } catch (e) {
+    if (out) out.textContent = 'Erreur réseau : ' + e.message;
+    toast('Erreur réseau — la fonction est-elle déployée ?', 'err');
+  }
+}
+ 
 </script>
 </body>
 </html>
